@@ -1,16 +1,7 @@
-export type HabitCategory =
-  | "Night"
-  | "Morning"
-  | "Salah"
-  | "Learning"
-  | "Health"
-  | "Work"
-  | "Character";
-
 export type Habit = {
   id: string;
   title: string;
-  category: HabitCategory;
+  category: string;
 };
 
 export type User = {
