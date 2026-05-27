@@ -1,29 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BookOpen,
-  Check,
+  ClipboardCheck,
   ChevronLeft,
   ChevronRight,
   Dumbbell,
   Landmark,
   Sun,
   Sunrise,
-  X,
 } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
+import { fetchActiveAppUsers } from "@/lib/auth/appUsers";
+import type { AppUser } from "@/lib/auth/assignedLogin";
+import {
+  fetchDailyHabitChecks,
+  getTodayDateKey,
+  type HabitStatus,
+  upsertDailyHabitStatus,
+} from "@/lib/habits/dailyChecks";
+import { fetchActiveHabits, type Habit } from "@/lib/habits/habits";
+import { fetchActiveRememberItems, type RememberItem } from "@/lib/remember/rememberItems";
 import { cn } from "@/lib/utils";
 
-const checklistItems = [
-  { id: "wake-before-fajr", label: "Wake before Fajr / Tahajjud", icon: Sunrise, color: "text-[#5bd269]" },
-  { id: "fajr-masjid", label: "Fajr in masjid", icon: Landmark, color: "text-[#5bd269]" },
-  { id: "dhuhr-masjid-1", label: "Dhuhr in masjid", icon: Sun, color: "text-[#f6c653]" },
-  { id: "quran-hadith-1", label: "Qur'an & Hadith learning", icon: BookOpen, color: "text-[#61bfff]" },
-  { id: "dhuhr-masjid-2", label: "Dhuhr in masjid", icon: Sun, color: "text-[#f6c653]" },
-  { id: "quran-hadith-2", label: "Qur'an & Hadith learning", icon: BookOpen, color: "text-[#61bfff]" },
-  { id: "walk-exercise", label: "Walk / exercise", icon: Dumbbell, color: "text-[#9d68ff]" },
-];
+const iconMap = {
+  sunrise: { icon: Sunrise, color: "text-[#5bd269]" },
+  masjid: { icon: Landmark, color: "text-[#5bd269]" },
+  sun: { icon: Sun, color: "text-[#f6c653]" },
+  book: { icon: BookOpen, color: "text-[#61bfff]" },
+  walk: { icon: Dumbbell, color: "text-[#9d68ff]" },
+  gym: { icon: Dumbbell, color: "text-[#9d68ff]" },
+} as const;
+
+function getHabitIcon(iconKey: string | null) {
+  return iconKey && iconKey in iconMap ? iconMap[iconKey as keyof typeof iconMap] : { icon: ClipboardCheck, color: "text-[#8be184]" };
+}
 
 function DateButton({ direction }: { direction: "previous" | "next" }) {
   const Icon = direction === "previous" ? ChevronLeft : ChevronRight;
@@ -39,13 +51,25 @@ function DateButton({ direction }: { direction: "previous" | "next" }) {
   );
 }
 
-function ScoreCard({ name, score, tone }: { name: string; score: string; tone: "me" | "hashim" }) {
+function ScoreCard({
+  name,
+  score,
+  tone,
+  userCode,
+  avatarUrl,
+}: {
+  name: string;
+  score: string;
+  tone: "me" | "hashim";
+  userCode?: string;
+  avatarUrl?: string | null;
+}) {
   const isMe = tone === "me";
 
   return (
     <div className="rounded-[18px] border border-white/10 bg-[#101a25]/82 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <div className="flex items-center gap-2.5">
-        <UserAvatar name={name} tone={tone} size="md" />
+        <UserAvatar name={name} userCode={userCode} avatarUrl={avatarUrl} tone={tone} size="md" />
         <div className="min-w-0">
           <p className="truncate text-base font-medium text-zinc-100 min-[390px]:text-lg">{name}</p>
           <p className={isMe ? "mt-0.5 text-base font-semibold text-[#ff5f58] min-[390px]:text-lg" : "mt-0.5 text-base font-semibold text-[#63d66a] min-[390px]:text-lg"}>
@@ -60,112 +84,243 @@ function ScoreCard({ name, score, tone }: { name: string; score: string; tone: "
   );
 }
 
-function StatusIcon({
-  checked,
-  square = false,
-  bare = false,
-  uncheckedTick = false,
-}: {
-  checked: boolean;
-  square?: boolean;
-  bare?: boolean;
-  uncheckedTick?: boolean;
-}) {
-  const Icon = checked || uncheckedTick ? Check : X;
-
-  if (bare) {
-    return (
-      <Icon
-        className={cn("h-5 w-5", checked ? "text-[#8be184]" : "text-zinc-500")}
-        strokeWidth={3}
-        aria-hidden="true"
-      />
-    );
-  }
-
-  return (
-    <span
-      className={cn(
-        "grid h-7 w-7 place-items-center border transition-colors",
-        square ? "rounded-md" : "rounded-full",
-        checked
-          ? "border-[#69c85f]/70 bg-[#69c85f] text-white"
-          : "border-white/15 bg-zinc-600/25 text-zinc-300/80",
-      )}
-    >
-      <Icon className="h-4 w-4" strokeWidth={3} aria-hidden="true" />
-    </span>
-  );
-}
-
 function ChecklistItem({
   item,
-  myChecked,
-  hashimChecked,
-  onToggleMyCheck,
+  myStatus,
+  partnerName,
+  partnerUserCode,
+  partnerAvatarUrl,
+  partnerStatus,
+  onSetMyStatus,
 }: {
-  item: (typeof checklistItems)[number];
-  myChecked: boolean;
-  hashimChecked: boolean;
-  onToggleMyCheck: () => void;
+  item: Habit;
+  myStatus: HabitStatus;
+  partnerName: string;
+  partnerUserCode: string;
+  partnerAvatarUrl?: string | null;
+  partnerStatus: HabitStatus;
+  onSetMyStatus: (status: Exclude<HabitStatus, null>) => void;
 }) {
-  const Icon = item.icon;
+  const { icon: Icon, color } = getHabitIcon(item.iconKey);
 
   return (
     <div className="rounded-[17px] border border-white/10 bg-[#101a25]/86 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
       <div className="flex items-center gap-3">
         <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0b1520]/60">
-          <Icon className={`h-6 w-6 ${item.color}`} strokeWidth={2.2} aria-hidden="true" />
+          <Icon className={`h-6 w-6 ${color}`} strokeWidth={2.2} aria-hidden="true" />
         </div>
         <p className="min-w-0 flex-1 truncate text-sm font-medium leading-snug text-zinc-100 min-[390px]:text-base">
-          {item.label}
+          {item.title}
         </p>
-        <button
-          type="button"
-          onClick={onToggleMyCheck}
-          className="rounded-md"
-          aria-pressed={myChecked}
-          aria-label={`Toggle ${item.label}`}
-        >
-          <StatusIcon checked={myChecked} square uncheckedTick />
-        </button>
+        <div className="flex shrink-0 gap-1.5">
+          <StatusButton status="yes" selected={myStatus === "yes"} onClick={() => onSetMyStatus("yes")} />
+          <StatusButton status="no" selected={myStatus === "no"} onClick={() => onSetMyStatus("no")} />
+        </div>
       </div>
 
       <div className="my-3 h-px bg-white/10" />
 
       <div className="flex items-center gap-3">
-        <UserAvatar name="Hashim" tone="hashim" size="sm" />
-        <p className="min-w-0 flex-1 text-sm font-medium text-zinc-100 min-[390px]:text-base">Hashim</p>
-        <StatusIcon checked={hashimChecked} bare />
+        <UserAvatar
+          name={partnerName}
+          userCode={partnerUserCode}
+          avatarUrl={partnerAvatarUrl}
+          tone={partnerUserCode === "hashim" ? "hashim" : "me"}
+          size="sm"
+        />
+        <p className="min-w-0 flex-1 text-sm font-medium text-zinc-100 min-[390px]:text-base">{partnerName}</p>
+        <PartnerStatusText status={partnerStatus} />
       </div>
     </div>
   );
 }
 
+function StatusButton({
+  status,
+  selected,
+  onClick,
+}: {
+  status: "yes" | "no";
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const isYes = status === "yes";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn(
+        "h-9 w-[58px] rounded-xl border text-sm font-semibold transition-colors min-[390px]:w-16",
+        selected && isYes
+          ? "border-[#63d66a] bg-[#58ad42] text-white"
+          : selected
+            ? "border-[#ff6b66] bg-[#b83e3a] text-white"
+            : isYes
+              ? "border-[#63d66a]/45 bg-[#1b332a]/55 text-[#9ee6a1]"
+              : "border-[#ff6b66]/45 bg-[#3a2026]/55 text-[#ff918d]",
+      )}
+    >
+      {isYes ? "Yes" : "No"}
+    </button>
+  );
+}
+
+function PartnerStatusText({ status }: { status: HabitStatus }) {
+  if (status === "yes") {
+    return <span className="text-sm font-semibold text-[#8be184] min-[390px]:text-base">Yes</span>;
+  }
+
+  if (status === "no") {
+    return <span className="text-sm font-semibold text-[#ff7e78] min-[390px]:text-base">No</span>;
+  }
+
+  return <span className="text-sm font-semibold text-zinc-500 min-[390px]:text-base">—</span>;
+}
+
+function RememberCard({ item }: { item: RememberItem }) {
+  return (
+    <div className="flex items-center gap-3 rounded-[15px] border border-white/10 bg-[#101a25]/72 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#8be184]" />
+      <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-zinc-200 min-[390px]:text-base">
+        {item.title}
+      </p>
+    </div>
+  );
+}
+
+function toStatusMap(checks: { habitId: string; status: HabitStatus }[]) {
+  return checks.reduce<Record<string, HabitStatus>>((statuses, check) => {
+    statuses[check.habitId] = check.status;
+    return statuses;
+  }, {});
+}
+
 type DailyScreenProps = {
-  userName?: string;
+  currentUser: AppUser;
+  onAvatarClick: () => void;
 };
 
-export function DailyScreen({ userName = "Shafi" }: DailyScreenProps) {
-  const [myChecks, setMyChecks] = useState<Record<string, boolean>>({
-    "wake-before-fajr": true,
-  });
+export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [rememberItems, setRememberItems] = useState<RememberItem[]>([]);
+  const [partnerUser, setPartnerUser] = useState<AppUser | null>(null);
+  const [isLoadingHabits, setIsLoadingHabits] = useState(true);
+  const [habitsError, setHabitsError] = useState<string | null>(null);
+  const [rememberError, setRememberError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [myStatuses, setMyStatuses] = useState<Record<string, HabitStatus>>({});
+  const [partnerStatuses, setPartnerStatuses] = useState<Record<string, HabitStatus>>({});
+  const [selectedDateKey] = useState(() => getTodayDateKey());
 
-  const hashimChecks: Record<string, boolean> = {
-    "wake-before-fajr": true,
-    "fajr-masjid": true,
-    "dhuhr-masjid-1": false,
-    "quran-hadith-1": true,
-    "dhuhr-masjid-2": false,
-    "quran-hadith-2": true,
-    "walk-exercise": false,
-  };
+  const partnerUserCode = partnerUser?.userCode ?? (currentUser.userCode === "hashim" ? "haris" : "hashim");
+  const partnerName = partnerUser?.displayName ?? (currentUser.userCode === "hashim" ? "Haris" : "Hashim");
+  const currentScore = `${habits.filter((habit) => myStatuses[habit.id] === "yes").length}/${habits.length || 0}`;
+  const partnerScore = `${habits.filter((habit) => partnerStatuses[habit.id] === "yes").length}/${habits.length || 0}`;
 
-  function toggleMyCheck(habitId: string) {
-    setMyChecks((current) => ({
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadHabits() {
+      try {
+        setIsLoadingHabits(true);
+        setHabitsError(null);
+        setRememberError(null);
+        setStatusError(null);
+
+        const [habitsResult, rememberResult, usersResult, myChecksResult] = await Promise.allSettled([
+          fetchActiveHabits(),
+          fetchActiveRememberItems(),
+          fetchActiveAppUsers(),
+          fetchDailyHabitChecks({ userId: currentUser.id, date: selectedDateKey }),
+        ]);
+
+        if (isMounted) {
+          if (habitsResult.status === "fulfilled") {
+            setHabits(habitsResult.value);
+          } else {
+            setHabitsError(habitsResult.reason instanceof Error ? habitsResult.reason.message : "Could not load habits. Please try again.");
+          }
+
+          if (rememberResult.status === "fulfilled") {
+            setRememberItems(rememberResult.value);
+          } else {
+            setRememberError(rememberResult.reason instanceof Error ? rememberResult.reason.message : "Could not load remember items. Please try again.");
+          }
+
+          if (usersResult.status === "fulfilled") {
+            const loadedPartnerUser = usersResult.value.find((user) => user.id !== currentUser.id) ?? null;
+            setPartnerUser(loadedPartnerUser);
+
+            if (loadedPartnerUser) {
+              try {
+                const partnerChecks = await fetchDailyHabitChecks({ userId: loadedPartnerUser.id, date: selectedDateKey });
+
+                if (isMounted) {
+                  setPartnerStatuses(toStatusMap(partnerChecks));
+                }
+              } catch (error) {
+                if (isMounted) {
+                  setStatusError(error instanceof Error ? error.message : "Could not load partner status. Please try again.");
+                }
+              }
+            }
+          } else {
+            setStatusError(usersResult.reason instanceof Error ? usersResult.reason.message : "Could not load users. Please try again.");
+          }
+
+          if (myChecksResult.status === "fulfilled") {
+            setMyStatuses(toStatusMap(myChecksResult.value));
+          } else {
+            setStatusError(myChecksResult.reason instanceof Error ? myChecksResult.reason.message : "Could not load today's checks. Please try again.");
+          }
+        }
+      } catch (error) {
+        if (isMounted) {
+          setHabitsError(error instanceof Error ? error.message : "Could not load habits. Please try again.");
+          setRememberError(error instanceof Error ? error.message : "Could not load remember items. Please try again.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingHabits(false);
+        }
+      }
+    }
+
+    loadHabits();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser.id, selectedDateKey]);
+
+  async function setMyHabitStatus(habitId: string, status: Exclude<HabitStatus, null>) {
+    if (myStatuses[habitId] === status) {
+      return;
+    }
+
+    const previousStatus = myStatuses[habitId] ?? null;
+    setStatusError(null);
+    setMyStatuses((current) => ({
       ...current,
-      [habitId]: !current[habitId],
+      [habitId]: status,
     }));
+
+    try {
+      await upsertDailyHabitStatus({
+        userId: currentUser.id,
+        habitId,
+        date: selectedDateKey,
+        status,
+      });
+    } catch (error) {
+      setMyStatuses((current) => ({
+        ...current,
+        [habitId]: previousStatus,
+      }));
+      setStatusError(error instanceof Error ? error.message : "Could not save status. Please try again.");
+    }
   }
 
   return (
@@ -173,9 +328,17 @@ export function DailyScreen({ userName = "Shafi" }: DailyScreenProps) {
       <header className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-zinc-400 min-[390px]:text-base">Assalamu alaikum,</p>
-          <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight text-white">{userName}</h1>
+          <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight text-white">{currentUser.displayName}</h1>
         </div>
-        <UserAvatar name="Shafi" tone="me" size="lg" />
+        <button type="button" onClick={onAvatarClick} className="rounded-full" aria-label="Open account options">
+          <UserAvatar
+            name={currentUser.displayName}
+            userCode={currentUser.userCode}
+            avatarUrl={currentUser.avatarUrl}
+            tone={currentUser.userCode === "hashim" ? "hashim" : "me"}
+            size="lg"
+          />
+        </button>
       </header>
 
       <section className="flex items-center gap-2 pt-1">
@@ -188,21 +351,64 @@ export function DailyScreen({ userName = "Shafi" }: DailyScreenProps) {
       </section>
 
       <section className="grid grid-cols-2 gap-2.5">
-        <ScoreCard name="Me" score="4/10" tone="me" />
-        <ScoreCard name="Hashim" score="7/10" tone="hashim" />
+        <ScoreCard
+          name="Me"
+          score={currentScore}
+          tone="me"
+          userCode={currentUser.userCode}
+          avatarUrl={currentUser.avatarUrl}
+        />
+        <ScoreCard
+          name={partnerName}
+          score={partnerScore}
+          tone={partnerUserCode === "hashim" ? "hashim" : "me"}
+          userCode={partnerUserCode}
+        />
       </section>
 
       <section className="space-y-3">
         <h2 className="text-2xl font-semibold tracking-tight text-white">Checklist</h2>
+        {isLoadingHabits ? (
+          <p className="rounded-[14px] border border-white/10 bg-[#101a25]/70 px-3 py-2 text-sm text-zinc-400">
+            Loading habits...
+          </p>
+        ) : null}
+        {habitsError ? (
+          <p className="rounded-[14px] border border-red-300/15 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {habitsError}
+          </p>
+        ) : null}
+        {statusError ? (
+          <p className="rounded-[14px] border border-red-300/15 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {statusError}
+          </p>
+        ) : null}
         <div className="space-y-2.5">
-          {checklistItems.map((item) => (
+          {habits.map((item) => (
             <ChecklistItem
               key={item.id}
               item={item}
-              myChecked={Boolean(myChecks[item.id])}
-              hashimChecked={Boolean(hashimChecks[item.id])}
-              onToggleMyCheck={() => toggleMyCheck(item.id)}
+              myStatus={myStatuses[item.id] ?? null}
+              partnerName={partnerName}
+              partnerUserCode={partnerUserCode}
+              partnerAvatarUrl={partnerUser?.avatarUrl}
+              partnerStatus={partnerStatuses[item.id] ?? null}
+              onSetMyStatus={(status) => setMyHabitStatus(item.id, status)}
             />
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-2xl font-semibold tracking-tight text-white">Remember</h2>
+        {rememberError ? (
+          <p className="rounded-[14px] border border-amber-300/15 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+            {rememberError}
+          </p>
+        ) : null}
+        <div className="space-y-2.5">
+          {rememberItems.map((item) => (
+            <RememberCard key={item.id} item={item} />
           ))}
         </div>
       </section>

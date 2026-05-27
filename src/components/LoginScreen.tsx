@@ -11,10 +11,10 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { validateAssignedLogin, type AssignedUser } from "@/lib/auth/supabase-login";
+import { loginWithAssignedPin, type AppUser } from "@/lib/auth/assignedLogin";
 
 type LoginScreenProps = {
-  onLogin: (user: AssignedUser) => void;
+  onLogin: (user: AppUser) => void;
 };
 
 function Illustration() {
@@ -62,14 +62,14 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     setIsSubmitting(true);
 
     try {
-      const user = await validateAssignedLogin(userId, pin);
+      const result = await loginWithAssignedPin(userId, pin);
 
-      if (!user) {
-        setError("Invalid user ID or PIN.");
+      if (result.error || !result.user) {
+        setError(result.error ?? "Invalid user ID or PIN.");
         return;
       }
 
-      onLogin(user);
+      onLogin(result.user);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Could not validate login. Please try again.");
     } finally {

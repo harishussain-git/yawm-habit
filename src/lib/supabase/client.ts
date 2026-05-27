@@ -11,4 +11,6 @@ if (!supabaseAnonKey) {
   throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const normalizedSupabaseUrl = supabaseUrl.replace(/\/rest\/v1\/?$/, "");
+
+export const supabase = createClient(normalizedSupabaseUrl, supabaseAnonKey);

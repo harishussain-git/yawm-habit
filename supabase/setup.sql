@@ -23,8 +23,8 @@ using (is_active = true);
 
 insert into public.app_users (user_code, display_name, role, pin, avatar_url)
 values
-  ('shafi', 'Shafi', 'me', '1234', null),
-  ('hashim', 'Hashim', 'partner', '1234', null)
+  ('haris', 'Haris', 'me', '1234', '/avatars/haris.webp'),
+  ('hashim', 'Hashim', 'partner', '1234', '/avatars/hashim.webp')
 on conflict (user_code) do update
 set
   display_name = excluded.display_name,

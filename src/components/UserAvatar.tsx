@@ -1,8 +1,14 @@
+"use client";
+
+import { useState } from "react";
 import { User } from "lucide-react";
+import { getUserAvatarUrl } from "@/lib/userAvatar";
 import { cn } from "@/lib/utils";
 
 type UserAvatarProps = {
   name: string;
+  userCode?: string;
+  avatarUrl?: string | null;
   tone?: "me" | "hashim" | "plain";
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -26,8 +32,10 @@ const toneClass = {
   plain: "bg-zinc-700/60",
 };
 
-export function UserAvatar({ name, tone = "plain", size = "md", className }: UserAvatarProps) {
-  const showIcon = tone === "plain";
+export function UserAvatar({ name, userCode, avatarUrl, tone = "plain", size = "md", className }: UserAvatarProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const imageUrl = imageFailed ? null : getUserAvatarUrl(userCode, avatarUrl);
+  const showIcon = !imageUrl && tone === "plain";
 
   return (
     <div
@@ -39,6 +47,14 @@ export function UserAvatar({ name, tone = "plain", size = "md", className }: Use
       )}
       aria-label={`${name} avatar`}
     >
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt=""
+          className="h-full w-full rounded-full object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : null}
       {showIcon ? <User className={cn("text-zinc-300", iconSizeClass[size])} aria-hidden="true" /> : null}
     </div>
   );

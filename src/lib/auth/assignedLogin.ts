@@ -1,35 +1,68 @@
-create extension if not exists pgcrypto;
+import { supabase } from "@/lib/supabase/client";
 
-create table if not exists public.app_users (
-  id uuid primary key default gen_random_uuid(),
-  user_code text not null unique,
-  display_name text not null,
-  role text not null check (role in ('me', 'partner')),
-  pin text not null,
-  avatar_url text null,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+export type AppUser = {
+  id: string;
+  userCode: string;
+  displayName: string;
+  role: "me" | "partner";
+  avatarUrl: string | null;
+};
 
-alter table public.app_users enable row level security;
+type AppUserRow = {
+  id: string;
+  user_code: string;
+  display_name: string;
+  role: "me" | "partner";
+  avatar_url: string | null;
+};
 
-drop policy if exists "Allow public login lookup" on public.app_users;
+type AssignedLoginResult = {
+  user: AppUser | null;
+  error: string | null;
+};
 
-create policy "Allow public login lookup"
-on public.app_users
-for select
-using (is_active = true);
+export async function loginWithAssignedPin(userCode: string, pin: string): Promise<AssignedLoginResult> {
+  const normalizedUserCode = userCode.trim().toLowerCase();
 
-insert into public.app_users (user_code, display_name, role, pin, avatar_url)
-values
-  ('shafi', 'Shafi', 'me', '1234', null),
-  ('hashim', 'Hashim', 'partner', '1234', null)
-on conflict (user_code) do update
-set
-  display_name = excluded.display_name,
-  role = excluded.role,
-  pin = excluded.pin,
-  avatar_url = excluded.avatar_url,
-  is_active = true,
-  updated_at = now();
+  if (!normalizedUserCode || !pin) {
+    return {
+      user: null,
+      error: "Enter your assigned ID and PIN.",
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("app_users")
+    .select("id,user_code,display_name,role,avatar_url")
+    .eq("user_code", normalizedUserCode)
+    .eq("pin", pin)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      user: null,
+      error: "Could not validate login. Please try again.",
+    };
+  }
+
+  if (!data) {
+    return {
+      user: null,
+      error: "Invalid user ID or PIN.",
+    };
+  }
+
+  const user = data as AppUserRow;
+
+  return {
+    user: {
+      id: user.id,
+      userCode: user.user_code,
+      displayName: user.display_name,
+      role: user.role,
+      avatarUrl: user.avatar_url,
+    },
+    error: null,
+  };
+}
