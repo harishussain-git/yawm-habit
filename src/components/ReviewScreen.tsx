@@ -5,6 +5,7 @@ import { BarChart3, ChevronDown, ChevronRight } from "lucide-react";
 import { UserAvatar } from "@/components/UserAvatar";
 import type { AppUser } from "@/lib/auth/assignedLogin";
 import { fetchMonthlyReviewData, type ReviewDaySummary, type ReviewMonthSummary } from "@/lib/habits/review";
+import { cn, getProgressColorClass, getProgressPercent } from "@/lib/utils";
 
 const monthOptionFormatter = new Intl.DateTimeFormat("en-US", {
   month: "long",
@@ -46,6 +47,9 @@ function ProgressLine({
   avatarUrl?: string | null;
   warm?: boolean;
 }) {
+  const percent = getProgressPercent(value, total);
+  const progressColor = warm ? "bg-[#e8d2b8]" : getProgressColorClass(value, total);
+
   return (
     <div className="grid grid-cols-[28px_1fr_40px] items-center gap-2">
       <div className="flex items-center">
@@ -62,8 +66,8 @@ function ProgressLine({
         <span className="w-12 text-sm font-medium text-zinc-300 min-[390px]:w-14 min-[390px]:text-base">{name}</span>
         <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-700/40">
           <div
-            className={warm ? "h-full rounded-full bg-[#e8d2b8]" : "h-full rounded-full bg-[#bdd7b8]"}
-            style={{ width: `${total > 0 ? Math.round((value / total) * 100) : 0}%` }}
+            className={cn("h-full rounded-full", progressColor)}
+            style={{ width: `${percent}%` }}
           />
         </div>
       </div>
@@ -173,9 +177,11 @@ export function ReviewScreen({ currentUser }: ReviewScreenProps) {
             {reviewData?.monthLabel ?? "This month"}
             <ChevronDown className="h-4 w-4 text-zinc-400" strokeWidth={2.5} aria-hidden="true" />
           </button>
-          <p className="mt-1.5 pr-1 text-xs font-medium text-zinc-600 min-[390px]:text-sm">
-            {reviewData?.hijriMonthLabel ?? "Dhul-Hijjah 1446"}
-          </p>
+          {reviewData?.hijriMonthLabel ? (
+            <p className="mt-1.5 pr-1 text-xs font-medium text-zinc-600 min-[390px]:text-sm">
+              {reviewData.hijriMonthLabel}
+            </p>
+          ) : null}
           {isMonthMenuOpen ? (
             <div className="absolute right-0 top-12 z-30 max-h-72 w-44 overflow-y-auto rounded-2xl border border-white/10 bg-[#111722] p-1.5 text-left shadow-[0_18px_50px_rgba(0,0,0,0.45)]">
               {monthOptions.map((month) => {

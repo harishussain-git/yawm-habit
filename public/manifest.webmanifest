@@ -1,0 +1,16 @@
+{
+  "name": "Yawm Habit",
+  "short_name": "Yawm",
+  "description": "Daily habit accountability tracker",
+  "display": "standalone",
+  "theme_color": "#020b12",
+  "background_color": "#020b12",
+  "icons": [
+    {
+      "src": "/avatars/appicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

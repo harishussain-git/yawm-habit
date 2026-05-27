@@ -24,15 +24,3 @@ export function addDays(date: Date, days: number) {
 export function isToday(date: Date) {
   return getDateKey(date) === getDateKey(new Date());
 }
-
-export function formatHijriDate(date: Date) {
-  try {
-    return new Intl.DateTimeFormat("en-TN-u-ca-islamic", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    }).format(date);
-  } catch {
-    return "";
-  }
-}

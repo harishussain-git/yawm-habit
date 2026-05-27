@@ -1,6 +1,7 @@
 import { fetchActiveAppUsers } from "@/lib/auth/appUsers";
 import type { AppUser } from "@/lib/auth/assignedLogin";
 import { getDateKey } from "@/lib/date/dateUtils";
+import { formatHijriMonthYear } from "@/lib/date/hijriDate";
 import { fetchActiveHabits } from "@/lib/habits/habits";
 import { supabase } from "@/lib/supabase/client";
 
@@ -150,7 +151,7 @@ export async function fetchMonthlyReviewData(
 
   return {
     monthLabel: monthFormatter.format(monthDate),
-    hijriMonthLabel: "Dhul-Hijjah 1446",
+    hijriMonthLabel: formatHijriMonthYear(monthDate),
     currentUser: resolvedCurrentUser,
     partnerUser,
     habitCount,

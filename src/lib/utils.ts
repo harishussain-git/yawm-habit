@@ -7,5 +7,19 @@ export function getProgressPercent(completed: number, total: number) {
     return 0;
   }
 
-  return Math.round((completed / total) * 100);
+  return Math.min(100, Math.max(0, Math.round((completed / total) * 100)));
+}
+
+export function getProgressColorClass(completed: number, total: number) {
+  const percent = getProgressPercent(completed, total);
+
+  if (percent <= 32) {
+    return "bg-[#ff5f58]";
+  }
+
+  if (percent <= 65) {
+    return "bg-[#f0a84f]";
+  }
+
+  return "bg-[#64c95d]";
 }

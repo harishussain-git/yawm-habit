@@ -1,5 +1,6 @@
 "use client";
 
+import type { SVGProps } from "react";
 import { useEffect, useState } from "react";
 import {
   BookOpen,
@@ -7,14 +8,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Dumbbell,
-  Landmark,
   Sun,
   Sunrise,
 } from "lucide-react";
+import { CompletionCelebration } from "@/components/CompletionCelebration";
 import { UserAvatar } from "@/components/UserAvatar";
 import { fetchActiveAppUsers } from "@/lib/auth/appUsers";
 import type { AppUser } from "@/lib/auth/assignedLogin";
-import { addDays, formatDisplayDate, formatHijriDate, getDateKey } from "@/lib/date/dateUtils";
+import { formatHijriDate } from "@/lib/date/hijriDate";
+import { addDays, formatDisplayDate, getDateKey } from "@/lib/date/dateUtils";
 import {
   fetchDailyHabitChecks,
   type HabitStatus,
@@ -22,16 +24,28 @@ import {
 } from "@/lib/habits/dailyChecks";
 import { fetchActiveHabits, type Habit } from "@/lib/habits/habits";
 import { fetchActiveRememberItems, type RememberItem } from "@/lib/remember/rememberItems";
-import { cn } from "@/lib/utils";
+import { cn, getProgressColorClass, getProgressPercent } from "@/lib/utils";
 
 const iconMap = {
   sunrise: { icon: Sunrise, color: "text-[#5bd269]" },
-  masjid: { icon: Landmark, color: "text-[#5bd269]" },
+  masjid: { icon: MasjidIcon, color: "text-[#5bd269]" },
   sun: { icon: Sun, color: "text-[#f6c653]" },
   book: { icon: BookOpen, color: "text-[#61bfff]" },
   walk: { icon: Dumbbell, color: "text-[#9d68ff]" },
   gym: { icon: Dumbbell, color: "text-[#9d68ff]" },
 } as const;
+
+function MasjidIcon({
+  className,
+  strokeWidth = 2,
+  ...props
+}: SVGProps<SVGSVGElement> & { strokeWidth?: number }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" {...props}>
+      <image href="/avatars/masjid.svg" x="2" y="2" width="20" height="20" preserveAspectRatio="xMidYMid meet" />
+    </svg>
+  );
+}
 
 function getHabitIcon(iconKey: string | null) {
   return iconKey && iconKey in iconMap ? iconMap[iconKey as keyof typeof iconMap] : { icon: ClipboardCheck, color: "text-[#8be184]" };
@@ -56,18 +70,23 @@ function DateButton({ direction, onClick }: { direction: DateDirection; onClick:
 
 function ScoreCard({
   name,
-  score,
+  done,
+  total,
   tone,
   userCode,
   avatarUrl,
 }: {
   name: string;
-  score: string;
+  done: number;
+  total: number;
   tone: "me" | "hashim";
   userCode?: string;
   avatarUrl?: string | null;
 }) {
-  const isMe = tone === "me";
+  const percent = getProgressPercent(done, total);
+  const progressColor = getProgressColorClass(done, total);
+  const scoreColor =
+    percent <= 32 ? "text-[#ff5f58]" : percent <= 65 ? "text-[#f0a84f]" : "text-[#63d66a]";
 
   return (
     <div className="rounded-[18px] border border-white/10 bg-[#101a25]/82 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -75,13 +94,13 @@ function ScoreCard({
         <UserAvatar name={name} userCode={userCode} avatarUrl={avatarUrl} tone={tone} size="md" />
         <div className="min-w-0">
           <p className="truncate text-base font-medium text-zinc-100 min-[390px]:text-lg">{name}</p>
-          <p className={isMe ? "mt-0.5 text-base font-semibold text-[#ff5f58] min-[390px]:text-lg" : "mt-0.5 text-base font-semibold text-[#63d66a] min-[390px]:text-lg"}>
-            {score}
+          <p className={cn("mt-0.5 text-base font-semibold min-[390px]:text-lg", scoreColor)}>
+            {done}/{total}
           </p>
         </div>
       </div>
       <div className="ml-[50px] mt-3 h-1.5 overflow-hidden rounded-full bg-zinc-700/45 min-[390px]:ml-[54px]">
-        <div className={isMe ? "h-full w-[40%] rounded-full bg-[#ff5f58]" : "h-full w-[70%] rounded-full bg-[#64c95d]"} />
+        <div className={cn("h-full rounded-full", progressColor)} style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -214,6 +233,7 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
   const [rememberError, setRememberError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isLoadingStatuses, setIsLoadingStatuses] = useState(false);
+  const [isCelebrationOpen, setIsCelebrationOpen] = useState(false);
   const [myStatuses, setMyStatuses] = useState<Record<string, HabitStatus>>({});
   const [partnerStatuses, setPartnerStatuses] = useState<Record<string, HabitStatus>>({});
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
@@ -223,8 +243,9 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
   const hijriDate = formatHijriDate(selectedDate);
   const partnerUserCode = partnerUser?.userCode ?? (currentUser.userCode === "hashim" ? "haris" : "hashim");
   const partnerName = partnerUser?.displayName ?? (currentUser.userCode === "hashim" ? "Haris" : "Hashim");
-  const currentScore = `${habits.filter((habit) => myStatuses[habit.id] === "yes").length}/${habits.length || 0}`;
-  const partnerScore = `${habits.filter((habit) => partnerStatuses[habit.id] === "yes").length}/${habits.length || 0}`;
+  const currentDone = habits.filter((habit) => myStatuses[habit.id] === "yes").length;
+  const partnerDone = habits.filter((habit) => partnerStatuses[habit.id] === "yes").length;
+  const totalHabits = habits.length || 0;
 
   useEffect(() => {
     let isMounted = true;
@@ -326,11 +347,14 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
     }
 
     const previousStatus = myStatuses[habitId] ?? null;
-    setStatusError(null);
-    setMyStatuses((current) => ({
-      ...current,
+    const previousDone = habits.filter((habit) => myStatuses[habit.id] === "yes").length;
+    const nextStatuses = {
+      ...myStatuses,
       [habitId]: status,
-    }));
+    };
+    const nextDone = habits.filter((habit) => nextStatuses[habit.id] === "yes").length;
+    setStatusError(null);
+    setMyStatuses(nextStatuses);
 
     try {
       await upsertDailyHabitStatus({
@@ -339,6 +363,10 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
         date: selectedDateKey,
         status,
       });
+
+      if (status === "yes" && habits.length > 0 && previousDone < habits.length && nextDone === habits.length) {
+        setIsCelebrationOpen(true);
+      }
     } catch (error) {
       setMyStatuses((current) => ({
         ...current,
@@ -386,7 +414,7 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
           {hijriDate ? (
             <p className="mt-0.5 text-xs font-medium text-zinc-500 min-[390px]:text-sm">{hijriDate}</p>
           ) : (
-            <p className="mt-0.5 text-xs font-medium text-zinc-500 min-[390px]:text-sm">Daily checklist</p>
+            <p className="mt-0.5 text-xs font-medium text-zinc-500 min-[390px]:text-sm">Daily habits</p>
           )}
         </button>
         <DateButton direction="next" onClick={() => changeSelectedDate("next")} />
@@ -395,21 +423,23 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
       <section className="grid grid-cols-2 gap-2.5">
         <ScoreCard
           name="Me"
-          score={currentScore}
+          done={currentDone}
+          total={totalHabits}
           tone="me"
           userCode={currentUser.userCode}
           avatarUrl={currentUser.avatarUrl}
         />
         <ScoreCard
           name={partnerName}
-          score={partnerScore}
+          done={partnerDone}
+          total={totalHabits}
           tone={partnerUserCode === "hashim" ? "hashim" : "me"}
           userCode={partnerUserCode}
         />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-white">Checklist</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-white">Habits</h2>
         {isLoadingHabits ? (
           <p className="rounded-[14px] border border-white/10 bg-[#101a25]/70 px-3 py-2 text-sm text-zinc-400">
             Loading habits...
@@ -459,6 +489,8 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
           ))}
         </div>
       </section>
+
+      <CompletionCelebration open={isCelebrationOpen} onClose={() => setIsCelebrationOpen(false)} />
     </div>
   );
 }
