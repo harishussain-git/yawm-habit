@@ -12,7 +12,6 @@ import {
   Sunrise,
 } from "lucide-react";
 import { CompletionCelebration } from "@/components/CompletionCelebration";
-import { isOneSignalReadyForPartnerNotify } from "@/components/EnableReminders";
 import { UserAvatar } from "@/components/UserAvatar";
 import { fetchActiveAppUsers } from "@/lib/auth/appUsers";
 import type { AppUser } from "@/lib/auth/assignedLogin";
@@ -221,19 +220,38 @@ function toStatusMap(checks: { habitId: string; status: HabitStatus }[]) {
 }
 
 function sendPartnerHabitNotification({
+  actorUserId,
   actorName,
   partnerUserId,
   habitTitle,
   status,
+  date,
 }: {
+  actorUserId: string;
   actorName: string;
   partnerUserId: string;
   habitTitle: string;
   status: Exclude<HabitStatus, null>;
+  date: string;
 }) {
-  if (!isOneSignalReadyForPartnerNotify()) {
+  const safeLogData = {
+    actorUserId,
+    actorName,
+    partnerUserId,
+    habitTitle,
+    status,
+    date,
+  };
+
+  if (partnerUserId === actorUserId) {
+    console.warn("Partner notification failed", {
+      ...safeLogData,
+      reason: "Partner user id matched actor user id.",
+    });
     return;
   }
+
+  console.info("Sending partner notification", safeLogData);
 
   fetch("/api/notifications/habit-status", {
     method: "POST",
@@ -246,8 +264,32 @@ function sendPartnerHabitNotification({
       habitTitle,
       status,
     }),
-  }).catch((error) => {
-    console.warn("Could not send partner habit notification.", error);
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        let responseBody: unknown = "Unknown notification API error.";
+
+        try {
+          responseBody = await response.json();
+        } catch {
+          responseBody = response.statusText || responseBody;
+        }
+
+        console.warn("Partner notification failed", {
+          ...safeLogData,
+          status: response.status,
+          response: responseBody,
+        });
+        return;
+      }
+
+      console.info("Partner notification sent", safeLogData);
+    })
+    .catch((error) => {
+      console.warn("Partner notification failed", {
+        ...safeLogData,
+        message: error instanceof Error ? error.message : "Network request failed.",
+      });
   });
 }
 
@@ -388,6 +430,15 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
     const nextDone = habits.filter((habit) => nextStatuses[habit.id] === "yes").length;
     setStatusError(null);
     setMyStatuses(nextStatuses);
+    const habitTitle = habits.find((habit) => habit.id === habitId)?.title;
+    console.info("Saving habit status", {
+      actorUserId: currentUser.id,
+      actorName: currentUser.displayName,
+      partnerUserId: partnerUser?.id ?? null,
+      habitTitle: habitTitle ?? habitId,
+      status,
+      date: selectedDateKey,
+    });
 
     try {
       await upsertDailyHabitStatus({
@@ -397,13 +448,33 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
         status,
       });
 
-      const habitTitle = habits.find((habit) => habit.id === habitId)?.title;
+      console.info("Habit status saved", {
+        actorUserId: currentUser.id,
+        actorName: currentUser.displayName,
+        partnerUserId: partnerUser?.id ?? null,
+        habitTitle: habitTitle ?? habitId,
+        status,
+        date: selectedDateKey,
+      });
+
       if (partnerUser?.id && habitTitle) {
-        sendPartnerHabitNotification({
+        void sendPartnerHabitNotification({
+          actorUserId: currentUser.id,
           actorName: currentUser.displayName,
           partnerUserId: partnerUser.id,
           habitTitle,
           status,
+          date: selectedDateKey,
+        });
+      } else {
+        console.warn("Partner notification failed", {
+          actorUserId: currentUser.id,
+          actorName: currentUser.displayName,
+          partnerUserId: partnerUser?.id ?? null,
+          habitTitle: habitTitle ?? habitId,
+          status,
+          date: selectedDateKey,
+          reason: "Missing partner user id or habit title.",
         });
       }
 
