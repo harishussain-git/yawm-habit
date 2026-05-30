@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Bell } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const ONESIGNAL_APP_ID = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID;
 
@@ -35,15 +37,15 @@ function isPushSupported() {
 
 function getStatusLabel(status: ReminderStatus) {
   if (status === "granted") {
-    return "granted";
+    return "Reminders are enabled.";
   }
 
   if (status === "denied") {
-    return "denied";
+    return "Notifications are blocked in this browser.";
   }
 
   if (status === "unsupported") {
-    return "unsupported";
+    return "Push reminders are not available here.";
   }
 
   return null;
@@ -129,28 +131,72 @@ export function isOneSignalReadyForPartnerNotify() {
 export function EnableReminders({ currentUserId }: { currentUserId: string }) {
   const [status, setStatus] = useState<ReminderStatus>("idle");
   const isConfigured = Boolean(ONESIGNAL_APP_ID);
-  const statusLabel = isConfigured ? getStatusLabel(status) : "setup needed";
+  const isEnabled = status === "granted";
+  const statusLabel = isConfigured ? getStatusLabel(status) : "Reminder setup is missing.";
+
+  useEffect(() => {
+    if (!isConfigured || typeof window === "undefined" || !("Notification" in window)) {
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      setStatus("granted");
+    }
+
+    if (Notification.permission === "denied") {
+      setStatus("denied");
+    }
+  }, [isConfigured]);
 
   async function handleEnableReminders() {
+    if (!isConfigured || status === "loading") {
+      return;
+    }
+
     setStatus("loading");
     const nextStatus = await initializeAndRequestPermission(currentUserId);
     setStatus(nextStatus);
   }
 
   return (
-    <section className="mt-4 rounded-[18px] border border-white/10 bg-[#101a25]/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-zinc-100">Enable reminders</p>
-          {statusLabel ? <p className="mt-1 text-xs font-medium text-zinc-500">{statusLabel}</p> : null}
+    <section className="rounded-[20px] border border-white/10 bg-[#101a25]/74 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <div className="flex items-center gap-3.5">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#16261f] text-[#83db76]">
+          <Bell className="h-5 w-5" strokeWidth={2.1} aria-hidden="true" />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-semibold text-zinc-100">Reminders</p>
+          <p className="mt-1 text-xs leading-snug text-zinc-500">
+            Get notified when others updates a habit.
+          </p>
+          {statusLabel ? (
+            <p className="mt-2 text-xs font-medium text-zinc-400">{statusLabel}</p>
+          ) : null}
         </div>
+
         <button
           type="button"
           onClick={handleEnableReminders}
           disabled={!isConfigured || status === "loading"}
-          className="min-h-9 shrink-0 rounded-xl bg-[#58ad42] px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+          role="switch"
+          aria-checked={isEnabled}
+          className={cn(
+            "relative h-8 w-14 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-65",
+            isEnabled
+              ? "border-[#8be184]/55 bg-[#63c650]"
+              : "border-white/10 bg-zinc-700/40",
+          )}
         >
-          {!isConfigured ? "Setup" : status === "loading" ? "Checking..." : "Enable"}
+          <span
+            className={cn(
+              "absolute top-1 h-6 w-6 rounded-full bg-zinc-100 shadow-sm transition-transform",
+              isEnabled ? "translate-x-6" : "translate-x-1",
+            )}
+          />
+          <span className="sr-only">
+            {status === "loading" ? "Checking reminders" : isEnabled ? "Reminders enabled" : "Enable reminders"}
+          </span>
         </button>
       </div>
     </section>

@@ -42,7 +42,7 @@ const monthFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 const weekdayFormatter = new Intl.DateTimeFormat("en-US", {
-  weekday: "long",
+  weekday: "short",
 });
 
 function getMonthBounds(monthDate: Date) {

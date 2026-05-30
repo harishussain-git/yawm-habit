@@ -431,7 +431,7 @@ export function DailyScreen({ currentUser, onAvatarClick }: DailyScreenProps) {
           <p className="text-sm font-medium text-zinc-400 min-[390px]:text-base">Assalamu alaikum,</p>
           <h1 className="mt-2 text-3xl font-semibold leading-none tracking-tight text-white">{currentUser.displayName}</h1>
         </div>
-        <button type="button" onClick={onAvatarClick} className="rounded-full" aria-label="Open account options">
+        <button type="button" onClick={onAvatarClick} className="rounded-full" aria-label="Open profile">
           <UserAvatar
             name={currentUser.displayName}
             userCode={currentUser.userCode}
