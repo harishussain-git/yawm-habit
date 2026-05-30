@@ -133,6 +133,7 @@ export function EnableReminders({ currentUserId }: { currentUserId: string }) {
   const isConfigured = Boolean(ONESIGNAL_APP_ID);
   const isEnabled = status === "granted";
   const statusLabel = isConfigured ? getStatusLabel(status) : "Reminder setup is missing.";
+  const isBusy = status === "loading";
 
   useEffect(() => {
     if (!isConfigured || typeof window === "undefined" || !("Notification" in window)) {
@@ -149,7 +150,7 @@ export function EnableReminders({ currentUserId }: { currentUserId: string }) {
   }, [isConfigured]);
 
   async function handleEnableReminders() {
-    if (!isConfigured || status === "loading") {
+    if (!isConfigured || isBusy) {
       return;
     }
 
@@ -159,43 +160,48 @@ export function EnableReminders({ currentUserId }: { currentUserId: string }) {
   }
 
   return (
-    <section className="rounded-[20px] border border-white/10 bg-[#101a25]/74 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-      <div className="flex items-center gap-3.5">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#16261f] text-[#83db76]">
+    <section className="rounded-[20px] border border-white/10 bg-[#101a25]/74 px-4 py-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-[#16261f] text-[#83db76]">
           <Bell className="h-5 w-5" strokeWidth={2.1} aria-hidden="true" />
         </span>
 
         <div className="min-w-0 flex-1">
           <p className="text-base font-semibold text-zinc-100">Reminders</p>
-          <p className="mt-1 text-xs leading-snug text-zinc-500">
-            Get notified when others updates a habit.
+          <p className="mt-0.5 text-xs leading-snug text-zinc-500">
+            Get notified when your partner updates a habit.
           </p>
           {statusLabel ? (
-            <p className="mt-2 text-xs font-medium text-zinc-400">{statusLabel}</p>
+            <p className={cn("mt-1.5 text-xs font-medium", isEnabled ? "text-[#8be184]" : "text-zinc-400")}>
+              {isBusy ? "Checking permission..." : statusLabel}
+            </p>
           ) : null}
         </div>
 
         <button
           type="button"
           onClick={handleEnableReminders}
-          disabled={!isConfigured || status === "loading"}
+          disabled={!isConfigured || isBusy}
           role="switch"
           aria-checked={isEnabled}
+          aria-label="Enable reminders"
           className={cn(
-            "relative h-8 w-14 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-65",
+            "relative h-7 w-12 shrink-0 rounded-full border transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-70",
             isEnabled
-              ? "border-[#8be184]/55 bg-[#63c650]"
-              : "border-white/10 bg-zinc-700/40",
+              ? "border-[#8be184]/50 bg-[#63c650]"
+              : "border-white/10 bg-[#2a3440]",
           )}
         >
           <span
             className={cn(
-              "absolute top-1 h-6 w-6 rounded-full bg-zinc-100 shadow-sm transition-transform",
-              isEnabled ? "translate-x-6" : "translate-x-1",
+              "absolute left-0.5 top-0.5 grid h-6 w-6 place-items-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.25)] transition-transform duration-200",
+              isEnabled ? "translate-x-5" : "translate-x-0",
             )}
-          />
+          >
+            {isBusy ? <span className="h-3 w-3 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" /> : null}
+          </span>
           <span className="sr-only">
-            {status === "loading" ? "Checking reminders" : isEnabled ? "Reminders enabled" : "Enable reminders"}
+            {isBusy ? "Checking reminders" : isEnabled ? "Reminders enabled" : "Enable reminders"}
           </span>
         </button>
       </div>
